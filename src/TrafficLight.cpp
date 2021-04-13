@@ -18,7 +18,7 @@ T MessageQueue<T>::receive()
     // The received object should then be returned by the receive function.
 
     // perform queue modification under the lock
-    std::unique_lock<std::mutex> uLock(_mutexT);
+    std::unique_lock<std::mutex> uLock(_mtx);
 
     // wait until new T elemente be added to _queue
     _cond.wait(uLock, [this] { return !_queue.empty(); }); // pass unique lock to condition variable
@@ -36,11 +36,11 @@ void MessageQueue<T>::send(T &&msg)
     // FP.4a : The method send should use the mechanisms std::lock_guard<std::mutex>
     // as well as _condition.notify_one() to add a new message to the queue and afterwards send a notification.
 
-    // DEBUG ONLY
-    std::this_thread::sleep_for(std::chrono::milliseconds(100));
-
     // perform _queue modification under the lock
-    std::lock_guard<std::mutex> uLock(_mutexT);
+    std::lock_guard<std::mutex> uLock(_mtx);
+
+    // Clear queue if it has accumulated previous elements
+    if(!_queue.empty()) _queue.clear();
 
     // add T to _queue
     _queue.push_back(std::move(msg));
@@ -54,7 +54,11 @@ void MessageQueue<T>::send(T &&msg)
 
 TrafficLight::TrafficLight()
 {
+    std::lock_guard<std::mutex> lck(_mutex);
     _currentPhase = TrafficLightPhase::red;
+
+    // initialize the queue as a shared pointer to be accessed by different threads
+    _traficLightPhaseQueue = std::make_shared<MessageQueue<TrafficLightPhase>>();
 }
 
 void TrafficLight::waitForGreen()
@@ -65,13 +69,16 @@ void TrafficLight::waitForGreen()
 
     while(true){
         TrafficLightPhase tflCheck = _traficLightPhaseQueue->receive();
+        
+        // if receive a green TrafficLightPhase, then exit while loop
         if(tflCheck == TrafficLightPhase::green) break;
     }
 }
 
+// Get the current Trafic light phase safely with the lock
 TrafficLightPhase TrafficLight::getCurrentPhase()
 {
-    // std::lock_guard<std::mutex> lck(_mutex);
+    std::lock_guard<std::mutex> lck(_mutex);
     return _currentPhase;
 }
 
@@ -79,6 +86,7 @@ TrafficLightPhase TrafficLight::getCurrentPhase()
 void TrafficLight::simulate()
 {
     // FP.2b : Finally, the private method „cycleThroughPhases“ should be started in a thread when the public method „simulate“ is called. To do this, use the thread queue in the base class.
+    
     threads.emplace_back(std::thread(&TrafficLight::cycleThroughPhases, this));
 }
 
@@ -89,8 +97,7 @@ void TrafficLight::cycleThroughPhases()
     // and toggles the current phase of the traffic light between red and green and sends an update method
     // to the message queue using move semantics. The cycle duration should be a random value between 4 and 6 seconds.
     // Also, the while-loop should use std::this_thread::sleep_for to wait 1ms between two cycles.
-
-    _traficLightPhaseQueue = std::make_shared<MessageQueue<TrafficLightPhase>>();
+    
     // initialize stop watch variable with current time
     std::chrono::high_resolution_clock::time_point t1 = std::chrono::high_resolution_clock::now();
 
@@ -108,8 +115,10 @@ void TrafficLight::cycleThroughPhases()
             std::uniform_int_distribution<> distr(4, 6);
             cycleDuration = distr(eng);
 
-            // lock to toggle _currentPhase value
+            // lock to toggle _currentPhase value under if context
             std::lock_guard<std::mutex> lck(_mutex);
+
+            // toggle _currentPhase value
             _currentPhase = (_currentPhase == TrafficLightPhase::red) ? TrafficLightPhase::green : TrafficLightPhase::red;
 
             TrafficLightPhase t = _currentPhase;

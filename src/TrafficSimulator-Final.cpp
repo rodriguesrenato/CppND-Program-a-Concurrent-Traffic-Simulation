@@ -123,9 +123,14 @@ int main()
     std::vector<std::shared_ptr<Intersection>> intersections;
     std::vector<std::shared_ptr<Vehicle>> vehicles;
     std::string backgroundImg;
+    
+    // Define numeber o vehicles that will be spawned in the simualtion
     int nVehicles = 6;
-    // createTrafficObjects_Paris(streets, intersections, vehicles, backgroundImg, nVehicles);
-    createTrafficObjects_NYC(streets, intersections, vehicles, backgroundImg, nVehicles);
+
+    // Uncomment which map you want to be loaded
+    createTrafficObjects_Paris(streets, intersections, vehicles, backgroundImg, nVehicles);
+    // createTrafficObjects_NYC(streets, intersections, vehicles, backgroundImg, nVehicles);
+    
     /* PART 2 : simulate traffic objects */
 
     // simulate intersection
